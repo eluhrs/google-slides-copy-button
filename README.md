@@ -1,4 +1,4 @@
-# Slides Prompt Copier (v0.21)
+# Slides Prompt Copier (v0.22)
 
 A small Chrome (Manifest V3) extension for running prompt demos from Google Slides.
 Put a labeled block on a slide (e.g. `PROMPT: <your prompt text>`) and a copy button
@@ -16,9 +16,10 @@ present on one screen and paste into your AI tool on the other.
     slide (corner of your choice). It appears **only on slides that contain your
     configured label**, so non-prompt decks and non-prompt slides stay clean.
   - **Preview** (`/preview`): a copy icon in the footer bar.
-  - **Edit**: an always-visible button (corner of your choice) that looks **exactly
-    like the slideshow copy button**. Clicking it opens settings -- use it to set the
-    label/corner so the slideshow button will show. It does not copy.
+  - **Edit**: the **same** always-visible button (corner of your choice). It behaves
+    exactly like the slideshow button -- short press copies the current slide's
+    prompt (handy while building a deck), long press opens settings. It's always
+    shown in the editor so you can set a label even on a slide that has none yet.
 - The floating button is pinned to the **slide rectangle**, not the screen, so it
   sits in the same spot on every slide regardless of how the slide is letterboxed
   (black margins on a laptop, full-bleed on an external monitor). The button in edit
@@ -40,7 +41,7 @@ present on one screen and paste into your AI tool on the other.
    select this folder.
 3. To update: overwrite the two files **in the exact folder Chrome loaded from**,
    click the **reload** icon on the card, then refresh the Slides tab. The card and
-   the button tooltip show the version (e.g. **0.21**).
+   the button tooltip show the version (e.g. **0.22**).
 
 The extension requests `storage` (to remember settings) and `clipboardWrite`.
 
@@ -63,10 +64,10 @@ repeat across many slides; the button always copies the current slide's.
 
 ---
 
-## Settings (the editor button, or long-press in slideshow/preview)
+## Settings (long-press the floating button; or use the preview footer button)
 
-In the **editor**, a single click on the floating button opens settings. In
-**slideshow/preview**, **long-press** the copy button (so a normal click still copies).
+**Long-press** the floating button to open settings (a normal short press copies).
+This works the same in the editor and in slideshow.
 
 - **Select Label to Copy** -- a dropdown of the `LABEL:` tags found on the current
   slide (alphabetical). Choosing from the dropdown works in slideshow, where Slides
@@ -76,18 +77,6 @@ In the **editor**, a single click on the floating button opens settings. In
 
 Settings save **per deck**; a new deck inherits your last-used label and corner, and
 changes sync live to any open tabs.
-
----
-
-## Future improvements
-
-- **Free-text label entry in the editor.** The settings dropdown only lists labels
-  it can already detect on the current slide, so you can't pre-set a brand-new label
-  on a blank slide from the dropdown alone. Consider an "add custom label" affordance
-  (slideshow blocks typing, but the editor does not -- a text field there is viable).
-- Internationalize the trailing-UI cutoff (currently English-only -- see Gotchas).
-- Consider scoping reads to the slide container directly rather than via the
-  visible-SVG heuristic, if Slides' DOM ever changes.
 
 ---
 
@@ -171,6 +160,14 @@ re-introduces bugs that are slow and confusing to diagnose.
     then the viewport. When re-placing each tick, set only `top`/`left` -- an
     *attribute* change, which the childList MutationObserver ignores, so it won't
     re-enter; changing children would loop.
+
+13. **In the editor, scope text reads to the slide page rect.** The filmstrip
+    thumbnails carry EVERY slide's text in the same DOM with the *same* classes
+    (`g.sketchy-text-content-text`), distinguishable only by position -- so an
+    unrestricted read returns "prompt1 | prompt2 | test | ..." and copies the wrong
+    slide. In edit view, read only SVG text whose center falls inside the current
+    slide rect (`.canvas`); that also drops the speaker-notes box. Slideshow/preview
+    don't need this (no visible filmstrip), so the scoping is editor-only.
 
 ---
 

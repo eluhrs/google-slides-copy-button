@@ -1,12 +1,13 @@
-// Slides Prompt Copier  (v0.21)
+// Slides Prompt Copier  (v0.22)
 // Copies the text after a configurable label (default "PROMPT:") on the current
 // slide to your clipboard.
 //   - Slideshow (/present): floating copy button, shown ONLY on slides that
 //                           contain the configured label.
 //   - Preview  (/preview):  copy icon in the footer bar.
-//   - Editor:               floating button (identical to the slideshow copy
-//                           button) -> click opens settings. It does not copy.
-// Click the slideshow/preview button (or press Alt+C) to copy.
+//   - Editor:               the SAME floating button as slideshow -- short press
+//                           copies the current slide's prompt, long press opens
+//                           settings. (Handy while building a deck.)
+// Click the slideshow/editor button (or press Alt+C) to copy.
 // LONG-PRESS the button to open settings: change the label ("slug") and pick
 // which corner the slideshow button sits in. Settings are saved per-deck, and a
 // new deck inherits your last-used settings.
@@ -17,7 +18,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "0.21";
+  var VERSION = "0.22";
   var REPO_URL = "https://github.com/eluhrs/google-slides-copy-button";
   var BTN_ID = "sp-copy-btn";
   var PANEL_ID = "sp-settings-panel";
@@ -86,15 +87,21 @@
   }
 
   // Slides renders the slide as vectors and exposes its text via SVG <text>/<tspan>
-  // and aria-labels. We read only text INSIDE the slide's <svg> (and only visible),
-  // which scopes to the current slide and excludes Google's HTML UI chrome (account
-  // chip, status text, filmstrip, etc.) that would otherwise pollute the labels.
-  function collectDocText(doc) {
-    if (!doc || !doc.body) return "";
+  // and aria-labels. We read only VISIBLE such text. Optionally we also restrict to
+  // a rectangle: in the EDITOR the filmstrip thumbnails carry EVERY slide's text (in
+  // the same DOM, same classes), so an unrestricted read mixes slides; passing the
+  // current slide page rect keeps only text whose center falls on the page.
+  function collectDocText(doc, rect) {
+    if (!doc || !doc.querySelectorAll) return "";
     var parts = [];
     try {
       doc.querySelectorAll("svg text, svg tspan, svg [aria-label]").forEach(function (el) {
         if (!isElVisible(el)) return;
+        if (rect) {
+          var r = el.getBoundingClientRect();
+          var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          if (cx < rect.left - 2 || cx > rect.right + 2 || cy < rect.top - 2 || cy > rect.bottom + 2) return;
+        }
         var aria = el.getAttribute && el.getAttribute("aria-label");
         if (aria) parts.push(aria);
         var tc = el.textContent;
@@ -105,11 +112,19 @@
   }
 
   function getAllSlideText() {
-    var text = collectDocText(document);
+    var present = isPresentMode() || !!(document.fullscreenElement || document.webkitFullscreenElement);
+    if (!present) {
+      // Editor: scope to the current slide page rect (.canvas) so the filmstrip
+      // thumbnails (which hold every slide's text) and the speaker-notes box don't
+      // leak in. findSlideRect() returns that rect in top-window coordinates, which
+      // match the editor's (no present iframe in edit view).
+      return collectDocText(document, findSlideRect());
+    }
+    var text = collectDocText(document, null);
     var frames = document.querySelectorAll("iframe");
     for (var i = 0; i < frames.length; i++) {
       try {
-        if (frames[i].contentDocument) text += "\n" + collectDocText(frames[i].contentDocument);
+        if (frames[i].contentDocument) text += "\n" + collectDocText(frames[i].contentDocument, null);
       } catch (e) {}
     }
     return text;
@@ -434,22 +449,9 @@
     });
     setIcon(btn, COPY_PATH);
   }
-  // Editor view: a fixed floating button (pinned to the chosen corner). It is
-  // VISUALLY IDENTICAL to the slideshow copy button (same dark circle, same copy
-  // icon, same 40px size) -- only its behavior differs: clicking opens settings so
-  // you can set the label/corner; it does NOT copy (the editor canvas + filmstrip
-  // would make copy unreliable).
-  function applyEditStyle(btn) {
-    btn._baseColor = PRESENT_COLOR; btn._iconSize = 20;
-    btn.title = "Slides Prompt Copier -- click for settings (v" + VERSION + ")";
-    var c = cornerStyle(settings.corner, "14px");
-    Object.assign(btn.style, {
-      position: "fixed", top: c.top, right: c.right, left: c.left, bottom: c.bottom, margin: "0",
-      zIndex: "2147483647", width: "40px", height: "40px", borderRadius: "50%",
-      color: PRESENT_COLOR, background: "rgba(32,33,36,0.55)", boxShadow: "0 1px 4px rgba(0,0,0,0.4)"
-    });
-    setIcon(btn, COPY_PATH);
-  }
+  // The editor uses the SAME button as slideshow (applyPresentStyle): same look AND
+  // behavior -- short press copies the current slide's prompt (reads are scoped to
+  // the slide page so the filmstrip doesn't interfere), long press opens settings.
 
   // --- Settings panel ----------------------------------------------------------
   // Find "LABEL:" tags on the current slide (a word immediately followed by a
@@ -644,12 +646,13 @@
     btn.addEventListener("mousedown", function (e) { e.stopPropagation(); e.preventDefault(); });
     btn.addEventListener("click", function (e) {
       e.preventDefault(); e.stopPropagation();
-      if (lpFired) { lpFired = false; return; } // long-press already handled
-      if (btn.dataset.mode === "edit") { openSettings(); return; } // editor button: settings only
-      handleCopy(btn);
-      // Hand focus straight back to the slideshow so its nav controls respond
-      // immediately (don't make the user click the slide first).
-      try { if (document.body && document.body.focus) document.body.focus({ preventScroll: true }); } catch (e2) {}
+      if (lpFired) { lpFired = false; return; } // long-press already handled -> settings
+      handleCopy(btn); // short press copies, in every floating mode (slideshow + editor)
+      // In slideshow, hand focus back to the page <body> so the nav arrows keep
+      // responding without clicking the slide first. (Not needed in the editor.)
+      if (btn.dataset.mode === "present") {
+        try { if (document.body && document.body.focus) document.body.focus({ preventScroll: true }); } catch (e2) {}
+      }
     });
     return btn;
   }
@@ -669,7 +672,8 @@
   }
 
   // Slideshow -> floating copy button (only on slides that have the label);
-  // preview -> footer bar copy button; editor -> same floating button (opens settings).
+  // preview -> footer bar copy button; editor -> the same floating copy button
+  // (always shown, so you can long-press to set a label even on a blank slide).
   function ensureButton() {
     var fs = document.fullscreenElement || document.webkitFullscreenElement || null;
     var present = isPresentMode() || !!fs;
@@ -692,9 +696,8 @@
     // icon and trigger the MutationObserver in a loop).
     if (btn.dataset.mode !== mode) {
       btn.dataset.mode = mode;
-      if (mode === "present") applyPresentStyle(btn);
-      else if (mode === "edit") applyEditStyle(btn);
-      else applyBarStyle(btn);
+      if (mode === "bar") applyBarStyle(btn);
+      else applyPresentStyle(btn); // present + edit: same look and behavior
     }
 
     if (mode === "bar") {
