@@ -1,4 +1,4 @@
-// Slides Prompt Copier  (v0.14)
+// Slides Prompt Copier  (v0.15)
 // Copies the text after a configurable label (default "PROMPT:") on the current
 // slide to your clipboard.
 //   - Slideshow view (/present): always-visible round button over the slide.
@@ -15,7 +15,8 @@
 (function () {
   "use strict";
 
-  var VERSION = "0.14";
+  var VERSION = "0.15";
+  var REPO_URL = "https://github.com/eluhrs/google-slides-copy-button";
   var BTN_ID = "sp-copy-btn";
   var PANEL_ID = "sp-settings-panel";
   var BAR_COLOR = "#444746";     // toolbar-gray icon (preview)
@@ -317,7 +318,7 @@
 
   // --- Settings panel ----------------------------------------------------------
   // Find "LABEL:" tags on the current slide (a word immediately followed by a
-  // colon and then some text). Used for the tap-to-pick chips.
+  // colon and then some text).
   function scanLabels() {
     var full = getAllSlideText();
     // Find "WORD:" tags anywhere (not just at line starts), so labels packed onto
@@ -341,40 +342,6 @@
     saveSettings();
     var b = document.getElementById(BTN_ID);
     if (b) b.title = baseTitle();
-  }
-
-  function chipStyle(b, active) {
-    Object.assign(b.style, {
-      padding: "4px 10px", border: "1px solid #c7cdd6", borderRadius: "14px",
-      background: active ? "#1a73e8" : "#fff", color: active ? "#fff" : "#1f1f1f",
-      cursor: "pointer", font: "600 12px Arial, sans-serif"
-    });
-  }
-
-  function renderChips(wrap) {
-    while (wrap.firstChild) wrap.removeChild(wrap.firstChild);
-    var labels = scanLabels();
-    if (!labels.length) {
-      var none = document.createElement("span");
-      none.textContent = "(no LABEL: tags found on this slide)";
-      Object.assign(none.style, { color: "#80868b", font: "12px Arial" });
-      wrap.appendChild(none);
-      return;
-    }
-    labels.forEach(function (label) {
-      var b = document.createElement("button");
-      b.type = "button";
-      b.textContent = label;
-      chipStyle(b, label === settings.slug);
-      b.addEventListener("click", function (e) {
-        e.stopPropagation();
-        applySlug(label);
-        renderChips(wrap);
-        var inp = document.getElementById("sp-slug-input");
-        if (inp) inp.value = settings.slug;
-      });
-      wrap.appendChild(b);
-    });
   }
 
   function styleCornerBtn(b, active) {
@@ -405,8 +372,18 @@
     });
 
     var title = document.createElement("div");
-    title.textContent = "Copy button settings (v" + VERSION + ")";
     Object.assign(title.style, { fontWeight: "700", marginBottom: "8px" });
+    title.appendChild(document.createTextNode("Copy button settings ("));
+    var vlink = document.createElement("a");
+    vlink.textContent = "v" + VERSION;
+    vlink.href = REPO_URL;
+    vlink.target = "_blank";
+    vlink.rel = "noopener noreferrer";
+    vlink.title = "View project on GitHub";
+    vlink.style.color = "#1a73e8";
+    vlink.addEventListener("click", function (e) { e.stopPropagation(); }); // open link, don't reach slide
+    title.appendChild(vlink);
+    title.appendChild(document.createTextNode(")"));
     panel.appendChild(title);
 
     // Label dropdown: choose which "LABEL:" on the slide to copy.
@@ -475,17 +452,9 @@
     return panel;
   }
 
-
   function refreshCornerButtons(panel) {
     var btns = panel.querySelectorAll("button[data-corner]");
     for (var i = 0; i < btns.length; i++) styleCornerBtn(btns[i], btns[i].dataset.corner === settings.corner);
-  }
-
-  function saveFromPanel(panel) {
-    var input = panel.querySelector("#sp-slug-input");
-    var v = (input && input.value || "").trim();
-    if (v) applySlug(v);
-    closePanel();
   }
 
   function currentHost() {

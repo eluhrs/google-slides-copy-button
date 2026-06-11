@@ -1,4 +1,4 @@
-# Slides Prompt Copier (v0.14)
+# Slides Prompt Copier (v0.15)
 
 A small Chrome (Manifest V3) extension for running prompt demos from Google Slides.
 Put a labeled block on a slide (e.g. `PROMPT: <your prompt text>`) and a copy button
@@ -20,7 +20,8 @@ present on one screen and paste into your AI tool on the other.
   **current** slide. A brief bottom-center banner confirms: green **"Copied PROMPT"**
   on success, red **"Failed to copy PROMPT"** / **"No 'PROMPT:' on this slide"**
   otherwise.
-- **Long-press** the button to open settings (label + corner).
+- **Long-press** the button to open settings (label + corner). The version shown in
+  the settings title links to this repo.
 
 ---
 
@@ -32,7 +33,7 @@ present on one screen and paste into your AI tool on the other.
    select this folder.
 3. To update: overwrite the two files **in the exact folder Chrome loaded from**,
    click the **reload** icon on the card, then refresh the Slides tab. The card and
-   the button tooltip show the version (e.g. **0.14**).
+   the button tooltip show the version (e.g. **0.15**).
 
 The extension requests `storage` (to remember settings) and `clipboardWrite`.
 
