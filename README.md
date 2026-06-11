@@ -1,4 +1,4 @@
-# Slides Prompt Copier (v0.18)
+# Slides Prompt Copier (v0.19)
 
 A small Chrome (Manifest V3) extension for running prompt demos from Google Slides.
 Put a labeled block on a slide (e.g. `PROMPT: <your prompt text>`) and a copy button
@@ -40,7 +40,7 @@ present on one screen and paste into your AI tool on the other.
    select this folder.
 3. To update: overwrite the two files **in the exact folder Chrome loaded from**,
    click the **reload** icon on the card, then refresh the Slides tab. The card and
-   the button tooltip show the version (e.g. **0.18**).
+   the button tooltip show the version (e.g. **0.19**).
 
 The extension requests `storage` (to remember settings) and `clipboardWrite`.
 
@@ -148,19 +148,29 @@ re-introduces bugs that are slow and confusing to diagnose.
     tab; (c) `WebFetch`-style raw reads of present mode see a near-empty shell --
     inspect the live DOM instead.
 
-12. **Anchor the floating button to the slide page, found by its real element.**
+12. **Anchor the floating button to the slide page, and mind the present iframe.**
     Slides letterboxes the slide differently per display and mode, so a viewport
     corner lands in the margin in one place and on the slide in another. Do NOT guess
     the slide as "the largest `<svg>`" -- in the editor the largest SVG is the gray
-    `.workspace`, which is taller than the page, so the button floats above the slide.
-    Use the actual page element (verified live against Slides' DOM):
-    slideshow/`/present` -> `.punch-viewer-svgpage-svgcontainer` (the letterboxed
-    page, not the full-window viewer); editor -> `.canvas` (the white page, not
-    `.workspace`). Both have off-screen siblings (adjacent slides, filmstrip
-    thumbnails), so take the largest VISIBLE, in-viewport match; fall back to the
-    largest-visible-`<svg>` heuristic, then the viewport. When re-placing each tick,
-    set only `top`/`left` -- an *attribute* change, which the childList
-    MutationObserver ignores, so it won't re-enter; changing children would loop.
+    `.workspace` (taller than the page), so the button floats above the slide. Use the
+    real page element (all verified live against Slides' DOM):
+    - **Editor** -> `.canvas` (the white page, in the top document).
+    - **Windowed preview** (`/present` in a tab) -> `.punch-viewer-svgpage-svgcontainer`
+      in the top document.
+    - **True full-screen slideshow** (the "Slideshow" button) -> the viewer runs in
+      an `<iframe class="punch-present-iframe">` that fills the window, and the slide
+      (`.punch-viewer-svgpage-svgcontainer`) lives INSIDE that iframe. You must search
+      same-origin iframes too and ADD the iframe's offset to convert to top-window
+      coordinates. This is the case earlier versions missed: they searched only the
+      top document, found nothing, and fell back to the full-window overlay -- putting
+      the button in the black letterbox margin.
+
+    Off-screen siblings (adjacent slides, thumbnails) are filtered per-window; keep
+    the largest visible match. Fallback: the largest visible `<svg>` across frames
+    that does NOT fill its own window (the letterboxed slide, never a wrapper/overlay),
+    then the viewport. When re-placing each tick, set only `top`/`left` -- an
+    *attribute* change, which the childList MutationObserver ignores, so it won't
+    re-enter; changing children would loop.
 
 ---
 
