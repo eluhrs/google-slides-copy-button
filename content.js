@@ -1,13 +1,13 @@
-// Slides Prompt Copier  (v0.22)
+// Slides Prompt Copier  (v0.23)
 // Copies the text after a configurable label (default "PROMPT:") on the current
 // slide to your clipboard.
-//   - Slideshow (/present): floating copy button, shown ONLY on slides that
-//                           contain the configured label.
-//   - Preview  (/preview):  copy icon in the footer bar.
-//   - Editor:               the SAME floating button as slideshow -- short press
-//                           copies the current slide's prompt, long press opens
-//                           settings. (Handy while building a deck.)
-// Click the slideshow/editor button (or press Alt+C) to copy.
+// ONE floating copy button, everywhere:
+//   - Slideshow / preview / full-screen: shown ONLY on slides that contain the
+//                           configured label.
+//   - Editor:               the SAME button, but always shown (so you can set a
+//                           label on a blank slide while building a deck).
+// Short press copies the current slide's prompt; long press opens settings.
+// (Or press Alt+C to copy.)
 // LONG-PRESS the button to open settings: change the label ("slug") and pick
 // which corner the slideshow button sits in. Settings are saved per-deck, and a
 // new deck inherits your last-used settings.
@@ -18,7 +18,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "0.22";
+  var VERSION = "0.23";
   var REPO_URL = "https://github.com/eluhrs/google-slides-copy-button";
   var BTN_ID = "sp-copy-btn";
   var PANEL_ID = "sp-settings-panel";
@@ -112,8 +112,7 @@
   }
 
   function getAllSlideText() {
-    var present = isPresentMode() || !!(document.fullscreenElement || document.webkitFullscreenElement);
-    if (!present) {
+    if (!isViewerMode()) {
       // Editor: scope to the current slide page rect (.canvas) so the filmstrip
       // thumbnails (which hold every slide's text) and the speaker-notes box don't
       // leak in. findSlideRect() returns that rect in top-window coordinates, which
@@ -389,8 +388,7 @@
     var now = Date.now();
     if (now - _rectCache.t < 250) return _rectCache.val;
     _rectCache.t = now;
-    var present = isPresentMode() || !!(document.fullscreenElement || document.webkitFullscreenElement);
-    var primary = present ? ".punch-viewer-svgpage-svgcontainer" : ".canvas";
+    var primary = isViewerMode() ? ".punch-viewer-svgpage-svgcontainer" : ".canvas";
     var best = rectBySelector(primary) || largestSlideSvg();
     _rectCache.val = best;
     return best;
@@ -419,25 +417,9 @@
   }
   function placeFloating(btn) { placeAtCorner(btn, 40, 40, 14); }
 
-  // --- Per-mode styling ---
-  function hoverBg(btn) {
-    return btn.dataset.mode === "bar" ? "rgba(60,64,67,0.10)"
-      : "rgba(32,33,36,0.80)"; // present + edit share the dark style
-  }
-  function idleBg(btn) {
-    return btn.dataset.mode === "bar" ? "transparent"
-      : "rgba(32,33,36,0.55)"; // present + edit share the dark style
-  }
-  function applyBarStyle(btn) {
-    btn._baseColor = BAR_COLOR; btn._iconSize = 18;
-    btn.title = baseTitle();
-    Object.assign(btn.style, {
-      position: "static", margin: "0 0 0 6px", top: "", right: "", left: "", bottom: "",
-      zIndex: "", width: "28px", height: "28px", borderRadius: "4px",
-      color: BAR_COLOR, background: "transparent", boxShadow: ""
-    });
-    setIcon(btn, COPY_PATH);
-  }
+  // --- Button styling (one dark round button everywhere it floats) ---
+  function hoverBg() { return "rgba(32,33,36,0.80)"; }
+  function idleBg() { return "rgba(32,33,36,0.55)"; }
   function applyPresentStyle(btn) {
     btn._baseColor = PRESENT_COLOR; btn._iconSize = 20;
     btn.title = baseTitle();
@@ -658,6 +640,11 @@
   }
 
   function isPresentMode() { return /\/present\b/.test(location.pathname); }
+  function isPreviewMode() { return /\/preview\b/.test(location.pathname); }
+  // "Viewer" = any read-only presentation surface (slideshow, full-screen, or the
+  // /preview page). All of these use the same punch-viewer slide rendering and get
+  // the same floating button; only the EDITOR differs (always shown + scoped reads).
+  function isViewerMode() { return isPresentMode() || isPreviewMode() || !!(document.fullscreenElement || document.webkitFullscreenElement); }
 
   // Cheap, throttled check: does the CURRENT slide contain the configured label?
   // Used to auto-hide the slideshow button on slides/decks without a prompt.
@@ -671,20 +658,18 @@
     return _labelCache.val;
   }
 
-  // Slideshow -> floating copy button (only on slides that have the label);
-  // preview -> footer bar copy button; editor -> the same floating copy button
-  // (always shown, so you can long-press to set a label even on a blank slide).
+  // One floating copy button everywhere it appears. In a viewer (slideshow /
+  // preview / full-screen) it shows only on slides that have the label; in the
+  // editor it's always shown (so you can long-press to set a label on a blank slide).
   function ensureButton() {
     var fs = document.fullscreenElement || document.webkitFullscreenElement || null;
-    var present = isPresentMode() || !!fs;
-    var navbar = present ? null : document.querySelector(".punch-viewer-navbar");
-    var group = navbar && navbar.firstElementChild;
-    var mode = present ? "present" : (group ? "bar" : "edit");
+    var viewer = isViewerMode();
+    var mode = viewer ? "present" : "edit"; // dataset.mode drives the post-copy refocus
 
     var btn = document.getElementById(BTN_ID);
 
-    // In slideshow, only show the button on slides that actually contain the label.
-    if (mode === "present" && !currentSlideHasLabel()) {
+    // In a viewer, only show the button on slides that actually contain the label.
+    if (viewer && !currentSlideHasLabel()) {
       if (btn) btn.remove();
       closePanel();
       return;
@@ -692,24 +677,16 @@
 
     if (!btn) btn = createButton();
 
-    // Apply styling only on an actual change (re-styling every tick would swap the
-    // icon and trigger the MutationObserver in a loop).
-    if (btn.dataset.mode !== mode) {
-      btn.dataset.mode = mode;
-      if (mode === "bar") applyBarStyle(btn);
-      else applyPresentStyle(btn); // present + edit: same look and behavior
-    }
+    // Apply styling only on an actual mode change (re-styling every tick would swap
+    // the icon and trigger the MutationObserver in a loop).
+    if (btn.dataset.mode !== mode) { btn.dataset.mode = mode; applyPresentStyle(btn); }
 
-    if (mode === "bar") {
-      if (group && btn.parentElement !== group) group.appendChild(btn);
-    } else {
-      var host = (mode === "present" && fs) ? fs : document.documentElement;
-      if (btn.parentElement !== host) host.appendChild(btn);
-      // Pin to the slide rectangle every tick so it tracks slide resize / transitions
-      // and reflects the current corner. (Only sets top/left -- an attribute change,
-      // which the childList MutationObserver ignores, so no re-entrancy.)
-      placeFloating(btn);
-    }
+    var host = fs || document.documentElement;
+    if (btn.parentElement !== host) host.appendChild(btn);
+    // Pin to the slide rectangle every tick so it tracks slide resize / transitions
+    // and reflects the current corner. (Only sets top/left -- an attribute change,
+    // which the childList MutationObserver ignores, so no re-entrancy.)
+    placeFloating(btn);
   }
 
   // Keyboard shortcut: Alt+C

@@ -1,4 +1,4 @@
-# Slides Prompt Copier (v0.22)
+# Slides Prompt Copier (v0.23)
 
 A small Chrome (Manifest V3) extension for running prompt demos from Google Slides.
 Put a labeled block on a slide (e.g. `PROMPT: <your prompt text>`) and a copy button
@@ -11,22 +11,13 @@ present on one screen and paste into your AI tool on the other.
 
 ## What it does
 
-- Adds a copy button to your Google Slides:
-  - **Slideshow / present** (`/present`): a round copy button floating over the
-    slide (corner of your choice). It appears **only on slides that contain your
-    configured label**, so non-prompt decks and non-prompt slides stay clean.
-  - **Preview** (`/preview`): a copy icon in the footer bar.
-  - **Edit**: the **same** always-visible button (corner of your choice). It behaves
-    exactly like the slideshow button -- short press copies the current slide's
-    prompt (handy while building a deck), long press opens settings. It's always
-    shown in the editor so you can set a label even on a slide that has none yet.
-- The floating button is pinned to the **slide rectangle**, not the screen, so it
-  sits in the same spot on every slide regardless of how the slide is letterboxed
-  (black margins on a laptop, full-bleed on an external monitor). The button in edit
-  view sits in that same spot, so it shows the **"keep clear" zone** -- put slide
-  content elsewhere to avoid having the button cover it.
-- Click the button (or press **Alt+C**) to copy the text after your label on the
-  **current** slide. A brief bottom-center banner confirms: green **"Copied PROMPT"**
+- Adds one round **copy button** that floats in a corner of the slide (your choice).
+  It works the same everywhere -- slideshow, full-screen, the `/preview` page, and
+  the editor. In the presentation views it appears **only on slides that contain
+  your configured label** (so non-prompt decks stay clean); in the editor it's
+  always shown, so you can set a label while building a deck.
+- **Short press** copies the text after your label on the **current** slide (or
+  press **Alt+C**). A brief bottom-center banner confirms: green **"Copied PROMPT"**
   on success, red **"Failed to copy PROMPT"** / **"No 'PROMPT:' on this slide"**
   otherwise.
 - **Long-press** the button to open settings (label + corner).
@@ -41,7 +32,7 @@ present on one screen and paste into your AI tool on the other.
    select this folder.
 3. To update: overwrite the two files **in the exact folder Chrome loaded from**,
    click the **reload** icon on the card, then refresh the Slides tab. The card and
-   the button tooltip show the version (e.g. **0.22**).
+   the button tooltip show the version (e.g. **0.23**).
 
 The extension requests `storage` (to remember settings) and `clipboardWrite`.
 
@@ -64,10 +55,10 @@ repeat across many slides; the button always copies the current slide's.
 
 ---
 
-## Settings (long-press the floating button; or use the preview footer button)
+## Settings (long-press the floating button)
 
 **Long-press** the floating button to open settings (a normal short press copies).
-This works the same in the editor and in slideshow.
+This works the same everywhere the button appears.
 
 - **Select Label to Copy** -- a dropdown of the `LABEL:` tags found on the current
   slide (alphabetical). Choosing from the dropdown works in slideshow, where Slides
