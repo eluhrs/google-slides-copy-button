@@ -1,10 +1,12 @@
-// Slides Prompt Copier  (v0.15)
+// Slides Prompt Copier  (v0.17)
 // Copies the text after a configurable label (default "PROMPT:") on the current
 // slide to your clipboard.
-//   - Slideshow view (/present): always-visible round button over the slide.
-//   - Preview view  (/preview): button in the footer bar after the menu.
-//   - Edit view:                 no button (intentionally hidden).
-// Click the button (or press Alt+C) to copy.
+//   - Slideshow (/present): floating copy button, shown ONLY on slides that
+//                           contain the configured label.
+//   - Preview  (/preview):  copy icon in the footer bar.
+//   - Editor:               floating gear button -> click opens settings (so you
+//                           can set the label / corner). It does not copy.
+// Click the slideshow/preview button (or press Alt+C) to copy.
 // LONG-PRESS the button to open settings: change the label ("slug") and pick
 // which corner the slideshow button sits in. Settings are saved per-deck, and a
 // new deck inherits your last-used settings.
@@ -15,7 +17,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "0.15";
+  var VERSION = "0.17";
   var REPO_URL = "https://github.com/eluhrs/google-slides-copy-button";
   var BTN_ID = "sp-copy-btn";
   var PANEL_ID = "sp-settings-panel";
@@ -194,6 +196,7 @@
   var SVGNS = "http://www.w3.org/2000/svg";
   var COPY_PATH = "M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z";
   var CHECK_PATH = "M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z";
+  var GEAR_PATH = "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z";
 
   function makeIcon(path, size) {
     var svg = document.createElementNS(SVGNS, "svg");
@@ -290,23 +293,85 @@
     return o;
   }
 
+  // --- Anchor floating buttons to the SLIDE, not the screen ---
+  // Slides letterboxes the slide differently per display: on a laptop the slide is
+  // centered with black margins, on an external monitor it can fill the screen edge
+  // to edge. A viewport corner therefore lands in the margin on one machine and on
+  // the slide itself on another. Pinning to the slide rectangle keeps the button in
+  // the SAME spot on every slide regardless of letterboxing, and doubles as a
+  // visible "keep clear" zone so content can be placed to avoid it.
+  // We locate the slide as the largest visible, substantial <svg> on screen (the
+  // same visible-SVG heuristic the text reader already relies on).
+  var _rectCache = { t: 0, val: null };
+  function findSlideRect() {
+    var now = Date.now();
+    if (now - _rectCache.t < 250) return _rectCache.val;
+    _rectCache.t = now;
+    var vw = window.innerWidth || document.documentElement.clientWidth;
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    var vArea = vw * vh;
+    var best = null, bestArea = 0;
+    var svgs = document.querySelectorAll("svg");
+    for (var i = 0; i < svgs.length; i++) {
+      var s = svgs[i];
+      if (!isElVisible(s)) continue;
+      var r = s.getBoundingClientRect();
+      if (r.width < 120 || r.height < 120) continue;   // ignore icon-size SVGs
+      if (r.width * r.height < vArea * 0.12) continue;  // must be a substantial surface
+      var a = r.width * r.height;
+      if (a > bestArea) { bestArea = a; best = r; }
+    }
+    _rectCache.val = best;
+    return best;
+  }
+  // The rect to anchor to: the slide if found, else the whole viewport (this
+  // preserves the old viewport-corner behavior as a safe fallback).
+  function anchorRect() {
+    var r = findSlideRect();
+    if (r) return r;
+    var vw = window.innerWidth, vh = window.innerHeight;
+    return { top: 0, left: 0, right: vw, bottom: vh, width: vw, height: vh };
+  }
+  // Place a floating element at the chosen corner of the anchor rect, inset by
+  // `pad`, clamped to stay on screen.
+  function placeAtCorner(el, w, h, pad) {
+    var rect = anchorRect();
+    var corner = settings.corner, left, top;
+    if (corner === "tr")      { left = rect.right - pad - w; top = rect.top + pad; }
+    else if (corner === "tl") { left = rect.left + pad;      top = rect.top + pad; }
+    else if (corner === "br") { left = rect.right - pad - w; top = rect.bottom - pad - h; }
+    else                      { left = rect.left + pad;      top = rect.bottom - pad - h; } // bl
+    var vw = window.innerWidth, vh = window.innerHeight;
+    left = Math.max(6, Math.min(left, vw - w - 6));
+    top  = Math.max(6, Math.min(top,  vh - h - 6));
+    Object.assign(el.style, { top: Math.round(top) + "px", left: Math.round(left) + "px", right: "", bottom: "" });
+  }
+  function placeFloating(btn) { placeAtCorner(btn, 40, 40, 14); }
+
   // --- Per-mode styling ---
   function hoverBg(btn) {
-    return btn.dataset.mode === "present" ? "rgba(32,33,36,0.80)" : "rgba(60,64,67,0.10)";
+    return btn.dataset.mode === "present" ? "rgba(32,33,36,0.80)"
+      : btn.dataset.mode === "edit" ? "rgba(26,115,232,1)"
+      : "rgba(60,64,67,0.10)";
   }
   function idleBg(btn) {
-    return btn.dataset.mode === "present" ? "rgba(32,33,36,0.55)" : "transparent";
+    return btn.dataset.mode === "present" ? "rgba(32,33,36,0.55)"
+      : btn.dataset.mode === "edit" ? "rgba(26,115,232,0.92)"
+      : "transparent";
   }
   function applyBarStyle(btn) {
     btn._baseColor = BAR_COLOR; btn._iconSize = 18;
+    btn.title = baseTitle();
     Object.assign(btn.style, {
       position: "static", margin: "0 0 0 6px", top: "", right: "", left: "", bottom: "",
       zIndex: "", width: "28px", height: "28px", borderRadius: "4px",
       color: BAR_COLOR, background: "transparent", boxShadow: ""
     });
+    setIcon(btn, COPY_PATH);
   }
   function applyPresentStyle(btn) {
     btn._baseColor = PRESENT_COLOR; btn._iconSize = 20;
+    btn.title = baseTitle();
     var c = cornerStyle(settings.corner, "14px");
     Object.assign(btn.style, {
       position: "fixed", top: c.top, right: c.right, left: c.left, bottom: c.bottom, margin: "0",
@@ -314,6 +379,21 @@
       color: PRESENT_COLOR, background: "rgba(32,33,36,0.55)", boxShadow: "0 1px 4px rgba(0,0,0,0.4)"
     });
     setIcon(btn, COPY_PATH);
+  }
+  // Editor view: a fixed floating gear button (pinned to the chosen corner). Its
+  // only job is to open settings so you can set the label; it does NOT copy (the
+  // editor canvas + filmstrip would make copy unreliable). Blue + gear so it reads
+  // as a tool, distinct from the dark copy button in slideshow.
+  function applyEditStyle(btn) {
+    btn._baseColor = PRESENT_COLOR; btn._iconSize = 22;
+    btn.title = "Slides Prompt Copier -- click for settings (v" + VERSION + ")";
+    var c = cornerStyle(settings.corner, "14px");
+    Object.assign(btn.style, {
+      position: "fixed", top: c.top, right: c.right, left: c.left, bottom: c.bottom, margin: "0",
+      zIndex: "2147483647", width: "40px", height: "40px", borderRadius: "50%",
+      color: PRESENT_COLOR, background: "rgba(26,115,232,0.92)", boxShadow: "0 1px 4px rgba(0,0,0,0.4)"
+    });
+    setIcon(btn, GEAR_PATH);
   }
 
   // --- Settings panel ----------------------------------------------------------
@@ -353,8 +433,8 @@
   }
 
   function placePanel(panel) {
-    var c = cornerStyle(settings.corner, "64px"); // sit just inside the button
-    Object.assign(panel.style, { top: c.top, right: c.right, left: c.left, bottom: c.bottom });
+    var ph = panel.offsetHeight || 190;
+    placeAtCorner(panel, 230, ph, 64); // sit just inside the button, anchored to the slide
   }
 
   function buildPanel() {
@@ -452,6 +532,7 @@
     return panel;
   }
 
+
   function refreshCornerButtons(panel) {
     var btns = panel.querySelectorAll("button[data-corner]");
     for (var i = 0; i < btns.length; i++) styleCornerBtn(btns[i], btns[i].dataset.corner === settings.corner);
@@ -465,8 +546,8 @@
   function openSettings() {
     closePanel();
     var panel = buildPanel();
-    placePanel(panel);
     currentHost().appendChild(panel); // same host as button -> visible in full-screen
+    placePanel(panel);                // measure after it's in the DOM (needs offsetHeight)
   }
   function closePanel() {
     var p = document.getElementById(PANEL_ID);
@@ -488,7 +569,7 @@
     });
     setIcon(btn, COPY_PATH);
 
-    btn.addEventListener("mouseenter", function () { if (btn.title.indexOf("Copy") === 0) btn.style.background = hoverBg(btn); });
+    btn.addEventListener("mouseenter", function () { btn.style.background = hoverBg(btn); });
     btn.addEventListener("mouseleave", function () { btn.style.background = idleBg(btn); });
 
     // Long-press opens settings; a normal click copies. Keep both away from the slide.
@@ -509,6 +590,7 @@
     btn.addEventListener("click", function (e) {
       e.preventDefault(); e.stopPropagation();
       if (lpFired) { lpFired = false; return; } // long-press already handled
+      if (btn.dataset.mode === "edit") { openSettings(); return; } // editor gear: settings only
       handleCopy(btn);
       // Hand focus straight back to the slideshow so its nav controls respond
       // immediately (don't make the user click the slide first).
@@ -519,38 +601,56 @@
 
   function isPresentMode() { return /\/present\b/.test(location.pathname); }
 
-  // Slideshow/full-screen -> floating button; preview -> footer bar; edit -> none.
+  // Cheap, throttled check: does the CURRENT slide contain the configured label?
+  // Used to auto-hide the slideshow button on slides/decks without a prompt.
+  var _labelCache = { t: 0, val: false };
+  function currentSlideHasLabel() {
+    var now = Date.now();
+    if (now - _labelCache.t < 300) return _labelCache.val;
+    _labelCache.t = now;
+    rebuildTrigger();
+    _labelCache.val = triggerRe.test(getAllSlideText());
+    return _labelCache.val;
+  }
+
+  // Slideshow -> floating copy button (only on slides that have the label);
+  // preview -> footer bar copy button; editor -> floating gear (settings) button.
   function ensureButton() {
     var fs = document.fullscreenElement || document.webkitFullscreenElement || null;
     var present = isPresentMode() || !!fs;
     var navbar = present ? null : document.querySelector(".punch-viewer-navbar");
     var group = navbar && navbar.firstElementChild;
-    var mode = present ? "present" : (group ? "bar" : "none");
+    var mode = present ? "present" : (group ? "bar" : "edit");
 
     var btn = document.getElementById(BTN_ID);
 
-    if (mode === "none") { if (btn) btn.remove(); closePanel(); return; }
+    // In slideshow, only show the button on slides that actually contain the label.
+    if (mode === "present" && !currentSlideHasLabel()) {
+      if (btn) btn.remove();
+      closePanel();
+      return;
+    }
 
     if (!btn) btn = createButton();
 
-    // Apply styling only on an actual change (re-styling every tick would swap
-    // the icon and trigger the MutationObserver in a loop).
+    // Apply styling only on an actual change (re-styling every tick would swap the
+    // icon and trigger the MutationObserver in a loop).
     if (btn.dataset.mode !== mode) {
       btn.dataset.mode = mode;
-      if (mode === "present") { applyPresentStyle(btn); btn._appliedCorner = settings.corner; }
+      if (mode === "present") applyPresentStyle(btn);
+      else if (mode === "edit") applyEditStyle(btn);
       else applyBarStyle(btn);
-    } else if (mode === "present" && btn._appliedCorner !== settings.corner) {
-      // corner changed -> just move it (no icon churn)
-      var cc = cornerStyle(settings.corner, "14px");
-      Object.assign(btn.style, { top: cc.top, right: cc.right, left: cc.left, bottom: cc.bottom });
-      btn._appliedCorner = settings.corner;
     }
 
     if (mode === "bar") {
       if (group && btn.parentElement !== group) group.appendChild(btn);
     } else {
-      var host = fs || document.documentElement;
+      var host = (mode === "present" && fs) ? fs : document.documentElement;
       if (btn.parentElement !== host) host.appendChild(btn);
+      // Pin to the slide rectangle every tick so it tracks slide resize / transitions
+      // and reflects the current corner. (Only sets top/left -- an attribute change,
+      // which the childList MutationObserver ignores, so no re-entrancy.)
+      placeFloating(btn);
     }
   }
 
@@ -565,6 +665,14 @@
   // Re-place the button when entering/leaving full-screen slideshow.
   document.addEventListener("fullscreenchange", function () { ensureButton(); });
   document.addEventListener("webkitfullscreenchange", function () { ensureButton(); });
+  // Re-pin to the slide when the window/slide changes size (e.g. moving to an
+  // external display, where letterboxing changes). Also re-place an open panel.
+  window.addEventListener("resize", function () {
+    _rectCache.t = 0; // invalidate so we re-measure immediately
+    ensureButton();
+    var p = document.getElementById(PANEL_ID);
+    if (p) placePanel(p);
+  });
 
   // Live-sync settings across all open tabs of any deck: when one tab saves a new
   // label/corner, every other tab updates immediately (no reload needed).
