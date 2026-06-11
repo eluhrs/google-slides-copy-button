@@ -1,4 +1,4 @@
-// Slides Prompt Copier  (v0.19)
+// Slides Prompt Copier  (v0.20)
 // Copies the text after a configurable label (default "PROMPT:") on the current
 // slide to your clipboard.
 //   - Slideshow (/present): floating copy button, shown ONLY on slides that
@@ -17,7 +17,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "0.19";
+  var VERSION = "0.20";
   var REPO_URL = "https://github.com/eluhrs/google-slides-copy-button";
   var BTN_ID = "sp-copy-btn";
   var PANEL_ID = "sp-settings-panel";
@@ -263,7 +263,7 @@
         boxShadow: "0 2px 8px rgba(0,0,0,0.4)", pointerEvents: "none", textAlign: "center"
       });
     }
-    t.style.background = ok ? "rgba(24,128,56,0.96)" : "rgba(180,40,30,0.96)";
+    t.style.background = ok ? "rgba(52,138,91,0.80)" : "rgba(184,77,70,0.80)";
     t.textContent = msg;
     currentHost().appendChild(t);
     clearTimeout(t._tT);
@@ -407,14 +407,12 @@
 
   // --- Per-mode styling ---
   function hoverBg(btn) {
-    return btn.dataset.mode === "present" ? "rgba(32,33,36,0.80)"
-      : btn.dataset.mode === "edit" ? "rgba(26,115,232,1)"
-      : "rgba(60,64,67,0.10)";
+    return btn.dataset.mode === "bar" ? "rgba(60,64,67,0.10)"
+      : "rgba(32,33,36,0.80)"; // present + edit share the dark style
   }
   function idleBg(btn) {
-    return btn.dataset.mode === "present" ? "rgba(32,33,36,0.55)"
-      : btn.dataset.mode === "edit" ? "rgba(26,115,232,0.92)"
-      : "transparent";
+    return btn.dataset.mode === "bar" ? "transparent"
+      : "rgba(32,33,36,0.55)"; // present + edit share the dark style
   }
   function applyBarStyle(btn) {
     btn._baseColor = BAR_COLOR; btn._iconSize = 18;
@@ -439,16 +437,17 @@
   }
   // Editor view: a fixed floating gear button (pinned to the chosen corner). Its
   // only job is to open settings so you can set the label; it does NOT copy (the
-  // editor canvas + filmstrip would make copy unreliable). Blue + gear so it reads
-  // as a tool, distinct from the dark copy button in slideshow.
+  // editor canvas + filmstrip would make copy unreliable). Same dark translucent
+  // style as the slideshow copy button; only the icon (gear) differs, to signal
+  // "settings" rather than "copy".
   function applyEditStyle(btn) {
-    btn._baseColor = PRESENT_COLOR; btn._iconSize = 22;
+    btn._baseColor = PRESENT_COLOR; btn._iconSize = 20;
     btn.title = "Slides Prompt Copier -- click for settings (v" + VERSION + ")";
     var c = cornerStyle(settings.corner, "14px");
     Object.assign(btn.style, {
       position: "fixed", top: c.top, right: c.right, left: c.left, bottom: c.bottom, margin: "0",
       zIndex: "2147483647", width: "40px", height: "40px", borderRadius: "50%",
-      color: PRESENT_COLOR, background: "rgba(26,115,232,0.92)", boxShadow: "0 1px 4px rgba(0,0,0,0.4)"
+      color: PRESENT_COLOR, background: "rgba(32,33,36,0.55)", boxShadow: "0 1px 4px rgba(0,0,0,0.4)"
     });
     setIcon(btn, GEAR_PATH);
   }
