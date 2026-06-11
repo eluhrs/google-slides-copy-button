@@ -1,4 +1,4 @@
-# Slides Prompt Copier (v0.15)
+# Slides Prompt Copier (v0.17)
 
 A small Chrome (Manifest V3) extension for running prompt demos from Google Slides.
 Put a labeled block on a slide (e.g. `PROMPT: <your prompt text>`) and a copy button
@@ -12,16 +12,23 @@ present on one screen and paste into your AI tool on the other.
 ## What it does
 
 - Adds a copy button to your Google Slides:
-  - **Slideshow / present** (`/present`): an always-visible round button floating
-    over the slide (corner of your choice).
+  - **Slideshow / present** (`/present`): a round copy button floating over the
+    slide (corner of your choice). It appears **only on slides that contain your
+    configured label**, so non-prompt decks and non-prompt slides stay clean.
   - **Preview** (`/preview`): a copy icon in the footer bar.
-  - **Edit**: no button (kept out of the way while building slides).
+  - **Edit**: an always-visible blue **gear** button (corner of your choice).
+    It opens settings -- use it to set the label/corner so the slideshow button
+    will show. It does not copy.
+- The floating button is pinned to the **slide rectangle**, not the screen, so it
+  sits in the same spot on every slide regardless of how the slide is letterboxed
+  (black margins on a laptop, full-bleed on an external monitor). The gear in edit
+  view sits in that same spot, so it shows the **"keep clear" zone** -- put slide
+  content elsewhere to avoid having the button cover it.
 - Click the button (or press **Alt+C**) to copy the text after your label on the
   **current** slide. A brief bottom-center banner confirms: green **"Copied PROMPT"**
   on success, red **"Failed to copy PROMPT"** / **"No 'PROMPT:' on this slide"**
   otherwise.
-- **Long-press** the button to open settings (label + corner). The version shown in
-  the settings title links to this repo.
+- **Long-press** the button to open settings (label + corner).
 
 ---
 
@@ -33,7 +40,7 @@ present on one screen and paste into your AI tool on the other.
    select this folder.
 3. To update: overwrite the two files **in the exact folder Chrome loaded from**,
    click the **reload** icon on the card, then refresh the Slides tab. The card and
-   the button tooltip show the version (e.g. **0.15**).
+   the button tooltip show the version (e.g. **0.17**).
 
 The extension requests `storage` (to remember settings) and `clipboardWrite`.
 
@@ -56,13 +63,16 @@ repeat across many slides; the button always copies the current slide's.
 
 ---
 
-## Settings (long-press the button)
+## Settings (gear button in editor, or long-press in slideshow/preview)
+
+In the **editor**, click the blue gear to open settings. In **slideshow/preview**,
+**long-press** the copy button (so a normal click still copies).
 
 - **Select Label to Copy** -- a dropdown of the `LABEL:` tags found on the current
   slide (alphabetical). Choosing from the dropdown works in slideshow, where Slides
   blocks typing.
 - **Select button corner** -- diagonal-arrow buttons (TL / TR / BL / BR) to move the
-  floating slideshow button.
+  floating button to a corner **of the slide** (not the screen).
 
 Settings save **per deck**; a new deck inherits your last-used label and corner, and
 changes sync live to any open tabs.
@@ -71,9 +81,10 @@ changes sync live to any open tabs.
 
 ## Future improvements
 
-- **Re-evaluate copy button display in editing mode.** Currently the button is only
-  displayed in slideshow (and the preview footer); it is intentionally hidden in the
-  edit view. Reconsider whether an edit-mode affordance is useful.
+- **Free-text label entry in the editor.** The settings dropdown only lists labels
+  it can already detect on the current slide, so you can't pre-set a brand-new label
+  on a blank slide from the dropdown alone. Consider an "add custom label" affordance
+  (slideshow blocks typing, but the editor does not -- a text field there is viable).
 - Internationalize the trailing-UI cutoff (currently English-only -- see Gotchas).
 - Consider scoping reads to the slide container directly rather than via the
   visible-SVG heuristic, if Slides' DOM ever changes.
@@ -89,8 +100,8 @@ re-introduces bugs that are slow and confusing to diagnose.
    invisible line/paragraph separator (U+2028/U+2029) pasted into a regex *literal*
    silently breaks the whole script (it terminates the literal), with no obvious
    error -- the extension just stops running everywhere. Use `new RegExp("...\\u2028...")`
-   string form, never `/.../` literals containing exotic whitespace. The file must be
-   100% ASCII.
+   string form, never `/.../` literals containing exotic whitespace. There is a byte
+   check you can run: the file must be 100% ASCII.
 
 2. **Slides blocks keyboard input in slideshow.** In `/present`, Slides intercepts
    key events for navigation, so a text `<input>` cannot be typed into (even inside an
@@ -134,8 +145,17 @@ re-introduces bugs that are slow and confusing to diagnose.
 11. **Environment traps when debugging:** (a) the extension lives per Chrome *profile*
     -- it must be installed in the profile you present from; (b) after editing files,
     overwrite the *exact* folder Chrome loaded from and reload the card AND refresh the
-    tab; (c) raw HTTP reads of present mode see a near-empty shell -- inspect the live
-    DOM instead.
+    tab; (c) `WebFetch`-style raw reads of present mode see a near-empty shell --
+    inspect the live DOM instead.
+
+12. **Anchor the floating button to the slide, not the viewport.** Slides letterboxes
+    the slide differently per display (centered with black margins on one screen,
+    full-bleed on another), so a viewport corner lands in the margin on one machine
+    and on the slide on another. `findSlideRect()` picks the largest visible, in-
+    viewport `<svg>` as the slide and pins the button to that rect's corner (falling
+    back to the viewport if none is found). Set only `top`/`left` when re-placing --
+    that's an *attribute* change, which the childList MutationObserver ignores, so it
+    won't re-enter; changing children every tick would loop.
 
 ---
 
