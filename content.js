@@ -1,4 +1,4 @@
-// Slides Prompt Copier  (v0.17)
+// Slides Prompt Copier  (v0.18)
 // Copies the text after a configurable label (default "PROMPT:") on the current
 // slide to your clipboard.
 //   - Slideshow (/present): floating copy button, shown ONLY on slides that
@@ -17,7 +17,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "0.17";
+  var VERSION = "0.18";
   var REPO_URL = "https://github.com/eluhrs/google-slides-copy-button";
   var BTN_ID = "sp-copy-btn";
   var PANEL_ID = "sp-settings-panel";
@@ -294,33 +294,58 @@
   }
 
   // --- Anchor floating buttons to the SLIDE, not the screen ---
-  // Slides letterboxes the slide differently per display: on a laptop the slide is
-  // centered with black margins, on an external monitor it can fill the screen edge
-  // to edge. A viewport corner therefore lands in the margin on one machine and on
-  // the slide itself on another. Pinning to the slide rectangle keeps the button in
-  // the SAME spot on every slide regardless of letterboxing, and doubles as a
-  // visible "keep clear" zone so content can be placed to avoid it.
-  // We locate the slide as the largest visible, substantial <svg> on screen (the
-  // same visible-SVG heuristic the text reader already relies on).
-  var _rectCache = { t: 0, val: null };
-  function findSlideRect() {
-    var now = Date.now();
-    if (now - _rectCache.t < 250) return _rectCache.val;
-    _rectCache.t = now;
+  // Slides letterboxes the slide differently per display and mode: on a laptop the
+  // slide is centered with black margins, on an external monitor it can fill the
+  // screen edge to edge; the editor centers the page in a gray workspace. A viewport
+  // corner therefore lands in the margin in one place and on the slide in another.
+  // Pinning to the slide rectangle keeps the button in the SAME spot on every slide,
+  // and doubles as a visible "keep clear" zone so content can avoid it.
+  //
+  // We locate the slide page by its semantic Google Slides element (verified live):
+  //   - Slideshow (/present): ".punch-viewer-svgpage-svgcontainer" is exactly the
+  //     letterboxed page (16:9 etc.), NOT the full-window viewer.
+  //   - Editor:               ".canvas" is exactly the white page, NOT the larger
+  //     gray ".workspace" SVG (which is why the old largest-SVG guess floated the
+  //     button above the slide).
+  // Both can have off-screen siblings (adjacent slides / thumbnails), so we take the
+  // largest VISIBLE, in-viewport match. Fallbacks: the other selector, then the old
+  // largest-visible-<svg> heuristic, then (via anchorRect) the viewport.
+  function pickVisibleRect(sel) {
+    var els = document.querySelectorAll(sel);
+    var best = null, bestArea = 0;
+    for (var i = 0; i < els.length; i++) {
+      if (!isElVisible(els[i])) continue;
+      var r = els[i].getBoundingClientRect();
+      var a = r.width * r.height;
+      if (a > bestArea) { bestArea = a; best = r; }
+    }
+    return best;
+  }
+  function largestVisibleSvgRect() {
     var vw = window.innerWidth || document.documentElement.clientWidth;
     var vh = window.innerHeight || document.documentElement.clientHeight;
-    var vArea = vw * vh;
-    var best = null, bestArea = 0;
+    var vArea = vw * vh, best = null, bestArea = 0;
     var svgs = document.querySelectorAll("svg");
     for (var i = 0; i < svgs.length; i++) {
       var s = svgs[i];
       if (!isElVisible(s)) continue;
       var r = s.getBoundingClientRect();
-      if (r.width < 120 || r.height < 120) continue;   // ignore icon-size SVGs
-      if (r.width * r.height < vArea * 0.12) continue;  // must be a substantial surface
+      if (r.width < 120 || r.height < 120) continue;
+      if (r.width * r.height < vArea * 0.12) continue;
       var a = r.width * r.height;
       if (a > bestArea) { bestArea = a; best = r; }
     }
+    return best;
+  }
+  var _rectCache = { t: 0, val: null };
+  function findSlideRect() {
+    var now = Date.now();
+    if (now - _rectCache.t < 250) return _rectCache.val;
+    _rectCache.t = now;
+    var present = isPresentMode() || !!(document.fullscreenElement || document.webkitFullscreenElement);
+    var primary = present ? ".punch-viewer-svgpage-svgcontainer" : ".canvas";
+    var other = present ? ".canvas" : ".punch-viewer-svgpage-svgcontainer";
+    var best = pickVisibleRect(primary) || pickVisibleRect(other) || largestVisibleSvgRect();
     _rectCache.val = best;
     return best;
   }
