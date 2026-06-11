@@ -1,11 +1,11 @@
-// Slides Prompt Copier  (v0.20)
+// Slides Prompt Copier  (v0.21)
 // Copies the text after a configurable label (default "PROMPT:") on the current
 // slide to your clipboard.
 //   - Slideshow (/present): floating copy button, shown ONLY on slides that
 //                           contain the configured label.
 //   - Preview  (/preview):  copy icon in the footer bar.
-//   - Editor:               floating gear button -> click opens settings (so you
-//                           can set the label / corner). It does not copy.
+//   - Editor:               floating button (identical to the slideshow copy
+//                           button) -> click opens settings. It does not copy.
 // Click the slideshow/preview button (or press Alt+C) to copy.
 // LONG-PRESS the button to open settings: change the label ("slug") and pick
 // which corner the slideshow button sits in. Settings are saved per-deck, and a
@@ -17,7 +17,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "0.20";
+  var VERSION = "0.21";
   var REPO_URL = "https://github.com/eluhrs/google-slides-copy-button";
   var BTN_ID = "sp-copy-btn";
   var PANEL_ID = "sp-settings-panel";
@@ -196,7 +196,6 @@
   var SVGNS = "http://www.w3.org/2000/svg";
   var COPY_PATH = "M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z";
   var CHECK_PATH = "M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z";
-  var GEAR_PATH = "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z";
 
   function makeIcon(path, size) {
     var svg = document.createElementNS(SVGNS, "svg");
@@ -301,7 +300,7 @@
   //
   // We locate the slide page by its semantic element (all verified live):
   //   - Editor:                ".canvas" -- the white page (NOT the bigger gray
-  //                            ".workspace", which floats the gear above the slide).
+  //                            ".workspace", which floats the button above the slide).
   //   - Windowed preview (/present in a tab): ".punch-viewer-svgpage-svgcontainer"
   //                            in the TOP document.
   //   - TRUE full-screen slideshow ("Slideshow" button): the viewer runs inside an
@@ -435,11 +434,11 @@
     });
     setIcon(btn, COPY_PATH);
   }
-  // Editor view: a fixed floating gear button (pinned to the chosen corner). Its
-  // only job is to open settings so you can set the label; it does NOT copy (the
-  // editor canvas + filmstrip would make copy unreliable). Same dark translucent
-  // style as the slideshow copy button; only the icon (gear) differs, to signal
-  // "settings" rather than "copy".
+  // Editor view: a fixed floating button (pinned to the chosen corner). It is
+  // VISUALLY IDENTICAL to the slideshow copy button (same dark circle, same copy
+  // icon, same 40px size) -- only its behavior differs: clicking opens settings so
+  // you can set the label/corner; it does NOT copy (the editor canvas + filmstrip
+  // would make copy unreliable).
   function applyEditStyle(btn) {
     btn._baseColor = PRESENT_COLOR; btn._iconSize = 20;
     btn.title = "Slides Prompt Copier -- click for settings (v" + VERSION + ")";
@@ -449,7 +448,7 @@
       zIndex: "2147483647", width: "40px", height: "40px", borderRadius: "50%",
       color: PRESENT_COLOR, background: "rgba(32,33,36,0.55)", boxShadow: "0 1px 4px rgba(0,0,0,0.4)"
     });
-    setIcon(btn, GEAR_PATH);
+    setIcon(btn, COPY_PATH);
   }
 
   // --- Settings panel ----------------------------------------------------------
@@ -646,7 +645,7 @@
     btn.addEventListener("click", function (e) {
       e.preventDefault(); e.stopPropagation();
       if (lpFired) { lpFired = false; return; } // long-press already handled
-      if (btn.dataset.mode === "edit") { openSettings(); return; } // editor gear: settings only
+      if (btn.dataset.mode === "edit") { openSettings(); return; } // editor button: settings only
       handleCopy(btn);
       // Hand focus straight back to the slideshow so its nav controls respond
       // immediately (don't make the user click the slide first).
@@ -670,7 +669,7 @@
   }
 
   // Slideshow -> floating copy button (only on slides that have the label);
-  // preview -> footer bar copy button; editor -> floating gear (settings) button.
+  // preview -> footer bar copy button; editor -> same floating button (opens settings).
   function ensureButton() {
     var fs = document.fullscreenElement || document.webkitFullscreenElement || null;
     var present = isPresentMode() || !!fs;

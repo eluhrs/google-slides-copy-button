@@ -1,4 +1,4 @@
-# Slides Prompt Copier (v0.20)
+# Slides Prompt Copier (v0.21)
 
 A small Chrome (Manifest V3) extension for running prompt demos from Google Slides.
 Put a labeled block on a slide (e.g. `PROMPT: <your prompt text>`) and a copy button
@@ -16,12 +16,12 @@ present on one screen and paste into your AI tool on the other.
     slide (corner of your choice). It appears **only on slides that contain your
     configured label**, so non-prompt decks and non-prompt slides stay clean.
   - **Preview** (`/preview`): a copy icon in the footer bar.
-  - **Edit**: an always-visible **gear** button (corner of your choice), in the
-    same dark style as the slideshow button. It opens settings -- use it to set the
+  - **Edit**: an always-visible button (corner of your choice) that looks **exactly
+    like the slideshow copy button**. Clicking it opens settings -- use it to set the
     label/corner so the slideshow button will show. It does not copy.
 - The floating button is pinned to the **slide rectangle**, not the screen, so it
   sits in the same spot on every slide regardless of how the slide is letterboxed
-  (black margins on a laptop, full-bleed on an external monitor). The gear in edit
+  (black margins on a laptop, full-bleed on an external monitor). The button in edit
   view sits in that same spot, so it shows the **"keep clear" zone** -- put slide
   content elsewhere to avoid having the button cover it.
 - Click the button (or press **Alt+C**) to copy the text after your label on the
@@ -40,7 +40,7 @@ present on one screen and paste into your AI tool on the other.
    select this folder.
 3. To update: overwrite the two files **in the exact folder Chrome loaded from**,
    click the **reload** icon on the card, then refresh the Slides tab. The card and
-   the button tooltip show the version (e.g. **0.20**).
+   the button tooltip show the version (e.g. **0.21**).
 
 The extension requests `storage` (to remember settings) and `clipboardWrite`.
 
@@ -63,10 +63,10 @@ repeat across many slides; the button always copies the current slide's.
 
 ---
 
-## Settings (gear button in editor, or long-press in slideshow/preview)
+## Settings (the editor button, or long-press in slideshow/preview)
 
-In the **editor**, click the gear to open settings. In **slideshow/preview**,
-**long-press** the copy button (so a normal click still copies).
+In the **editor**, a single click on the floating button opens settings. In
+**slideshow/preview**, **long-press** the copy button (so a normal click still copies).
 
 - **Select Label to Copy** -- a dropdown of the `LABEL:` tags found on the current
   slide (alphabetical). Choosing from the dropdown works in slideshow, where Slides
