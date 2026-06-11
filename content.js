@@ -1,4 +1,4 @@
-// Slides Prompt Copier  (v0.18)
+// Slides Prompt Copier  (v0.19)
 // Copies the text after a configurable label (default "PROMPT:") on the current
 // slide to your clipboard.
 //   - Slideshow (/present): floating copy button, shown ONLY on slides that
@@ -17,7 +17,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "0.18";
+  var VERSION = "0.19";
   var REPO_URL = "https://github.com/eluhrs/google-slides-copy-button";
   var BTN_ID = "sp-copy-btn";
   var PANEL_ID = "sp-settings-panel";
@@ -294,47 +294,80 @@
   }
 
   // --- Anchor floating buttons to the SLIDE, not the screen ---
-  // Slides letterboxes the slide differently per display and mode: on a laptop the
-  // slide is centered with black margins, on an external monitor it can fill the
-  // screen edge to edge; the editor centers the page in a gray workspace. A viewport
-  // corner therefore lands in the margin in one place and on the slide in another.
-  // Pinning to the slide rectangle keeps the button in the SAME spot on every slide,
-  // and doubles as a visible "keep clear" zone so content can avoid it.
+  // Slides letterboxes the slide differently per display and mode, so a viewport
+  // corner lands in the margin in one place and on the slide in another. Pinning to
+  // the slide rectangle keeps the button in the SAME spot on every slide, and doubles
+  // as a visible "keep clear" zone so content can avoid it.
   //
-  // We locate the slide page by its semantic Google Slides element (verified live):
-  //   - Slideshow (/present): ".punch-viewer-svgpage-svgcontainer" is exactly the
-  //     letterboxed page (16:9 etc.), NOT the full-window viewer.
-  //   - Editor:               ".canvas" is exactly the white page, NOT the larger
-  //     gray ".workspace" SVG (which is why the old largest-SVG guess floated the
-  //     button above the slide).
-  // Both can have off-screen siblings (adjacent slides / thumbnails), so we take the
-  // largest VISIBLE, in-viewport match. Fallbacks: the other selector, then the old
-  // largest-visible-<svg> heuristic, then (via anchorRect) the viewport.
-  function pickVisibleRect(sel) {
-    var els = document.querySelectorAll(sel);
-    var best = null, bestArea = 0;
-    for (var i = 0; i < els.length; i++) {
-      if (!isElVisible(els[i])) continue;
-      var r = els[i].getBoundingClientRect();
-      var a = r.width * r.height;
-      if (a > bestArea) { bestArea = a; best = r; }
+  // We locate the slide page by its semantic element (all verified live):
+  //   - Editor:                ".canvas" -- the white page (NOT the bigger gray
+  //                            ".workspace", which floats the gear above the slide).
+  //   - Windowed preview (/present in a tab): ".punch-viewer-svgpage-svgcontainer"
+  //                            in the TOP document.
+  //   - TRUE full-screen slideshow ("Slideshow" button): the viewer runs inside an
+  //                            <iframe class="punch-present-iframe"> that fills the
+  //                            window, and the slide page lives INSIDE that iframe.
+  //                            So we must search same-origin iframes too and add the
+  //                            iframe's offset to get top-window coordinates. (This
+  //                            is the case the earlier versions missed -- they only
+  //                            looked at the top document and fell back to the
+  //                            full-window overlay, landing in the black margin.)
+  // Off-screen siblings (adjacent slides / thumbnails) are filtered per-window; we
+  // keep the largest visible match. Fallback: the largest visible <svg> across
+  // frames that does NOT fill its own window (the letterboxed slide, never a wrapper).
+  function frameVisible(el, win) {
+    var r = el.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) return false;
+    var iw = (win && win.innerWidth) || window.innerWidth;
+    var ih = (win && win.innerHeight) || window.innerHeight;
+    if (r.bottom <= 0 || r.top >= ih || r.right <= 0 || r.left >= iw) return false;
+    if (el.checkVisibility) { try { if (!el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return false; } catch (e) {} }
+    return true;
+  }
+  function offsetRect(r, ox, oy) {
+    return { left: r.left + ox, top: r.top + oy, right: r.right + ox, bottom: r.bottom + oy, width: r.width, height: r.height };
+  }
+  // Run fn(doc, offsetX, offsetY, win) for the top document and each same-origin
+  // iframe (offset = the iframe's position in the top viewport).
+  function scanFrames(fn) {
+    fn(document, 0, 0, window);
+    var frames = document.querySelectorAll("iframe");
+    for (var i = 0; i < frames.length; i++) {
+      var f = frames[i], fdoc;
+      try { fdoc = f.contentDocument; } catch (e) { continue; } // cross-origin -> skip
+      if (!fdoc) continue;
+      var fr = f.getBoundingClientRect();
+      fn(fdoc, fr.left, fr.top, f.contentWindow);
     }
+  }
+  function rectBySelector(sel) {
+    var best = null, bestArea = 0;
+    scanFrames(function (doc, ox, oy, win) {
+      var els; try { els = doc.querySelectorAll(sel); } catch (e) { return; }
+      for (var i = 0; i < els.length; i++) {
+        if (!frameVisible(els[i], win)) continue;
+        var r = els[i].getBoundingClientRect();
+        var a = r.width * r.height;
+        if (a > bestArea) { bestArea = a; best = offsetRect(r, ox, oy); }
+      }
+    });
     return best;
   }
-  function largestVisibleSvgRect() {
-    var vw = window.innerWidth || document.documentElement.clientWidth;
-    var vh = window.innerHeight || document.documentElement.clientHeight;
-    var vArea = vw * vh, best = null, bestArea = 0;
-    var svgs = document.querySelectorAll("svg");
-    for (var i = 0; i < svgs.length; i++) {
-      var s = svgs[i];
-      if (!isElVisible(s)) continue;
-      var r = s.getBoundingClientRect();
-      if (r.width < 120 || r.height < 120) continue;
-      if (r.width * r.height < vArea * 0.12) continue;
-      var a = r.width * r.height;
-      if (a > bestArea) { bestArea = a; best = r; }
-    }
+  function largestSlideSvg() {
+    var best = null, bestArea = 0;
+    scanFrames(function (doc, ox, oy, win) {
+      var iw = (win && win.innerWidth) || window.innerWidth;
+      var ih = (win && win.innerHeight) || window.innerHeight;
+      var els = doc.querySelectorAll("svg");
+      for (var i = 0; i < els.length; i++) {
+        if (!frameVisible(els[i], win)) continue;
+        var r = els[i].getBoundingClientRect();
+        if (r.width < 120 || r.height < 120) continue;
+        if (r.width >= iw * 0.985 && r.height >= ih * 0.985) continue; // skip full-window wrappers
+        var a = r.width * r.height;
+        if (a > bestArea) { bestArea = a; best = offsetRect(r, ox, oy); }
+      }
+    });
     return best;
   }
   var _rectCache = { t: 0, val: null };
@@ -344,8 +377,7 @@
     _rectCache.t = now;
     var present = isPresentMode() || !!(document.fullscreenElement || document.webkitFullscreenElement);
     var primary = present ? ".punch-viewer-svgpage-svgcontainer" : ".canvas";
-    var other = present ? ".canvas" : ".punch-viewer-svgpage-svgcontainer";
-    var best = pickVisibleRect(primary) || pickVisibleRect(other) || largestVisibleSvgRect();
+    var best = rectBySelector(primary) || largestSlideSvg();
     _rectCache.val = best;
     return best;
   }
