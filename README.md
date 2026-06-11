@@ -1,4 +1,4 @@
-# Slides Prompt Copier (v0.17)
+# Slides Prompt Copier (v0.18)
 
 A small Chrome (Manifest V3) extension for running prompt demos from Google Slides.
 Put a labeled block on a slide (e.g. `PROMPT: <your prompt text>`) and a copy button
@@ -40,7 +40,7 @@ present on one screen and paste into your AI tool on the other.
    select this folder.
 3. To update: overwrite the two files **in the exact folder Chrome loaded from**,
    click the **reload** icon on the card, then refresh the Slides tab. The card and
-   the button tooltip show the version (e.g. **0.17**).
+   the button tooltip show the version (e.g. **0.18**).
 
 The extension requests `storage` (to remember settings) and `clipboardWrite`.
 
@@ -148,14 +148,19 @@ re-introduces bugs that are slow and confusing to diagnose.
     tab; (c) `WebFetch`-style raw reads of present mode see a near-empty shell --
     inspect the live DOM instead.
 
-12. **Anchor the floating button to the slide, not the viewport.** Slides letterboxes
-    the slide differently per display (centered with black margins on one screen,
-    full-bleed on another), so a viewport corner lands in the margin on one machine
-    and on the slide on another. `findSlideRect()` picks the largest visible, in-
-    viewport `<svg>` as the slide and pins the button to that rect's corner (falling
-    back to the viewport if none is found). Set only `top`/`left` when re-placing --
-    that's an *attribute* change, which the childList MutationObserver ignores, so it
-    won't re-enter; changing children every tick would loop.
+12. **Anchor the floating button to the slide page, found by its real element.**
+    Slides letterboxes the slide differently per display and mode, so a viewport
+    corner lands in the margin in one place and on the slide in another. Do NOT guess
+    the slide as "the largest `<svg>`" -- in the editor the largest SVG is the gray
+    `.workspace`, which is taller than the page, so the button floats above the slide.
+    Use the actual page element (verified live against Slides' DOM):
+    slideshow/`/present` -> `.punch-viewer-svgpage-svgcontainer` (the letterboxed
+    page, not the full-window viewer); editor -> `.canvas` (the white page, not
+    `.workspace`). Both have off-screen siblings (adjacent slides, filmstrip
+    thumbnails), so take the largest VISIBLE, in-viewport match; fall back to the
+    largest-visible-`<svg>` heuristic, then the viewport. When re-placing each tick,
+    set only `top`/`left` -- an *attribute* change, which the childList
+    MutationObserver ignores, so it won't re-enter; changing children would loop.
 
 ---
 
