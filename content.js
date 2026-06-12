@@ -1,4 +1,4 @@
-// Slides Prompt Copier  (v0.23)
+// Slides Prompt Copier  (v0.24)
 // Copies the text after a configurable label (default "PROMPT:") on the current
 // slide to your clipboard.
 // ONE floating copy button, everywhere:
@@ -18,7 +18,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "0.23";
+  var VERSION = "0.24";
   var REPO_URL = "https://github.com/eluhrs/google-slides-copy-button";
   var BTN_ID = "sp-copy-btn";
   var PANEL_ID = "sp-settings-panel";
@@ -86,29 +86,59 @@
     return true;
   }
 
-  // Slides renders the slide as vectors and exposes its text via SVG <text>/<tspan>
-  // and aria-labels. We read only VISIBLE such text. Optionally we also restrict to
-  // a rectangle: in the EDITOR the filmstrip thumbnails carry EVERY slide's text (in
-  // the same DOM, same classes), so an unrestricted read mixes slides; passing the
-  // current slide page rect keeps only text whose center falls on the page.
+  // Collect the slide's text as geometry-aware lines. Slides renders text as many
+  // little SVG elements (often ONE PER WORD), so we can't rely on DOM structure for
+  // line/paragraph breaks -- we use position instead. We read only LEAF text elements
+  // (so a <text> and its child <tspan>s aren't both counted), group them into visual
+  // lines by vertical position, and join words on a line with spaces. Between lines we
+  // insert "\n", except where the vertical gap is clearly larger than one line height
+  // (> 1.5x) -- that marks a real PARAGRAPH break and becomes "\n\n". (extractPrompt
+  // later unwraps the soft "\n" word-wrap back into spaces but keeps "\n\n".)
+  // Optional `rect`: in the EDITOR the filmstrip thumbnails carry EVERY slide's text
+  // in the same DOM, so we keep only items whose center falls on the current page.
   function collectDocText(doc, rect) {
     if (!doc || !doc.querySelectorAll) return "";
-    var parts = [];
+    var items = [];
     try {
       doc.querySelectorAll("svg text, svg tspan, svg [aria-label]").forEach(function (el) {
+        if (el.querySelector && el.querySelector("text, tspan")) return; // not a leaf -> its children get read
         if (!isElVisible(el)) return;
+        var r = el.getBoundingClientRect();
         if (rect) {
-          var r = el.getBoundingClientRect();
           var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
           if (cx < rect.left - 2 || cx > rect.right + 2 || cy < rect.top - 2 || cy > rect.bottom + 2) return;
         }
-        var aria = el.getAttribute && el.getAttribute("aria-label");
-        if (aria) parts.push(aria);
-        var tc = el.textContent;
-        if (tc) parts.push(tc);
+        var tc = (el.textContent || "").replace(/\s+/g, " ").trim();
+        var s = tc || String((el.getAttribute && el.getAttribute("aria-label")) || "").trim();
+        if (s) items.push({ s: s, x: r.left, y: r.top, h: r.height || 12 });
       });
     } catch (e) {}
-    return parts.join("\n");
+    return linesFromItems(items);
+  }
+
+  // Group positioned text items into lines and paragraphs (see collectDocText).
+  function linesFromItems(items) {
+    if (!items.length) return "";
+    items.sort(function (a, b) { return (a.y - b.y) || (a.x - b.x); });
+    var lines = [];
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i], ln = lines.length ? lines[lines.length - 1] : null;
+      if (ln && Math.abs(it.y - ln.y) <= Math.max(4, 0.6 * it.h)) {       // same visual line
+        ln.parts.push(it); if (it.h > ln.h) ln.h = it.h;
+      } else {
+        lines.push({ y: it.y, h: it.h, parts: [it] });
+      }
+    }
+    var out = "";
+    for (var j = 0; j < lines.length; j++) {
+      var L = lines[j];
+      L.parts.sort(function (a, b) { return a.x - b.x; });
+      var lineText = L.parts.map(function (p) { return p.s; }).join(" ");
+      if (j === 0) { out = lineText; continue; }
+      var gap = L.y - lines[j - 1].y, lineH = Math.max(lines[j - 1].h, L.h) || 12;
+      out += (gap > 1.5 * lineH ? "\n\n" : "\n") + lineText;       // big gap = paragraph break
+    }
+    return out;
   }
 
   function getAllSlideText() {
@@ -133,6 +163,18 @@
     var m = s.match(noiseRe);
     if (m) s = s.slice(0, m.index);
     return s.trim();
+  }
+
+  // Unwrap SOFT line breaks (word-wrap, single "\n") within a paragraph back into
+  // spaces, while keeping blank-line PARAGRAPH breaks ("\n\n"). Yields clean prose:
+  // one tidy line for a single-paragraph prompt, separated blocks for several.
+  function formatPrompt(text) {
+    var paras = String(text).split(/\n{2,}/), out = [];
+    for (var i = 0; i < paras.length; i++) {
+      var p = paras[i].replace(/\s+/g, " ").trim();
+      if (p) out.push(p);
+    }
+    return out.join("\n\n");
   }
 
   // Take the text after the label, bounded by a line break, an [END] marker, or a
@@ -185,7 +227,7 @@
       var cand = after.slice(0, cut).trim();
       if (cand && (!best || cand.length > best.length)) best = cand;
     }
-    return best;
+    return best == null ? null : formatPrompt(best);
   }
 
   // --- Clipboard with fallback ---

@@ -1,4 +1,4 @@
-# Slides Prompt Copier (v0.23)
+# Slides Prompt Copier (v0.24)
 
 A small Chrome (Manifest V3) extension for running prompt demos from Google Slides.
 Put a labeled block on a slide (e.g. `PROMPT: <your prompt text>`) and a copy button
@@ -32,7 +32,7 @@ present on one screen and paste into your AI tool on the other.
    select this folder.
 3. To update: overwrite the two files **in the exact folder Chrome loaded from**,
    click the **reload** icon on the card, then refresh the Slides tab. The card and
-   the button tooltip show the version (e.g. **0.23**).
+   the button tooltip show the version (e.g. **0.24**).
 
 The extension requests `storage` (to remember settings) and `clipboardWrite`.
 
@@ -52,6 +52,12 @@ numbers, and prose -- those are kept. To cut a prompt short, add `[END]`; everyt
 after it is dropped. You can put several labeled boxes on one slide
 (`PROMPT:`, `PROMPT1:`, ...) and choose which to copy in settings. The same label can
 repeat across many slides; the button always copies the current slide's.
+
+**Paragraphs are preserved.** A single-paragraph prompt is copied as one clean line
+(word-wrap is joined up); paragraphs separated by a **blank line** are kept as
+separate paragraphs. Note: a single hard line break with no blank line between is
+indistinguishable from word-wrap, so it gets joined into the paragraph -- put a blank
+line between blocks you want kept apart.
 
 ---
 
@@ -159,6 +165,17 @@ re-introduces bugs that are slow and confusing to diagnose.
     slide. In edit view, read only SVG text whose center falls inside the current
     slide rect (`.canvas`); that also drops the speaker-notes box. Slideshow/preview
     don't need this (no visible filmstrip), so the scoping is editor-only.
+
+14. **Reconstruct paragraphs from geometry, not DOM structure.** Slides renders text
+    as many tiny SVG elements -- often ONE PER WORD (in the editor each word is its
+    own `<text>`; in the viewer they're `<tspan>`s). So you can't get line/paragraph
+    breaks from the DOM tree. Read only LEAF text elements (skip a `<text>` that
+    contains `<tspan>`s, or you double-count), then group by vertical position: same
+    `y` = same line (join with spaces); a vertical gap > ~1.5x the line height = a
+    real paragraph break. `extractPrompt` keeps `\n\n` (paragraph) and unwraps single
+    `\n` (word-wrap) back into spaces. The unavoidable limitation: a single hard
+    newline with no extra spacing is geometrically identical to word-wrap, so it gets
+    unwrapped; only blank-line-separated paragraphs survive.
 
 ---
 
